@@ -7,12 +7,11 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../../firebaseConfig';
 import { sendEmailVerification } from "firebase/auth";
-
+// import { SIZES } from '../../utils/constants/theme';
 const VerificationScreen = () => {
     const route = useRoute<any>();
     const navigation = useNavigation<any>();
     const email = route.params?.email || "your email";
-
     const [loading, setLoading] = useState(false);
     const [timer, setTimer] = useState(60);
     useEffect(() => {
@@ -29,7 +28,6 @@ const VerificationScreen = () => {
                 }
             }
         }, 3000); 
-
         return () => clearInterval(interval);
     }, [navigation]);
     useEffect(() => {
@@ -38,7 +36,6 @@ const VerificationScreen = () => {
         }, 1000);
         return () => clearInterval(timerInt);
     }, []);
-
     const handleResendLink = async () => {
         if (auth.currentUser) {
             try {
@@ -53,33 +50,27 @@ const VerificationScreen = () => {
             }
         }
     };
-
     const openGmail = () => {
-        Linking.openURL('mailto:'); // Default email client kholta hai
+        Linking.openURL('mailto:'); 
     };
-
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.iconCircle}>
                     <Text style={styles.icon}>✉️</Text>
                 </View>
-                
                 <Text style={styles.title}>Verify Email</Text>
                 <Text style={styles.subtitle}>We have sent a verification link to:</Text>
                 <Text style={styles.emailText}>{email}</Text>
-
                 <View style={styles.infoBox}>
                     <Text style={styles.infoText}>
                         Please check your inbox and click the link to verify your account. 
                         Once verified, you will be redirected to complete your address details.
                     </Text>
                 </View>
-
                 <TouchableOpacity style={styles.gmailButton} onPress={openGmail}>
                     <Text style={styles.gmailButtonText}>Open Email App</Text>
                 </TouchableOpacity>
-
                 {loading ? (
                     <ActivityIndicator color="#F3E932" style={{marginTop: 20}} />
                 ) : (
@@ -97,7 +88,6 @@ const VerificationScreen = () => {
         </SafeAreaView>
     );
 };
-
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0B0B0C' },
     content: { flex: 1, alignItems: 'center', paddingHorizontal: 24, paddingTop: 60 },
@@ -113,5 +103,4 @@ const styles = StyleSheet.create({
     resendContainer: { padding: 10 },
     resendText: { color: '#F3E932', fontWeight: '500', fontSize: 14 }
 });
-
 export default VerificationScreen;

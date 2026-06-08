@@ -1,13 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, Modal 
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, Modal, Alert, ActivityIndicator, useWindowDimensions
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-
+// --- FIREBASE IMPORTS ---
+import { db, auth } from '../../firebaseConfig'; 
+import { doc, onSnapshot, addDoc, collection, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { SIZES } from '../../utils/constants/theme';
 const SellGold = ({ navigation }: any) => {
+  const { width, height } = useWindowDimensions();
+  
+  // Responsive sizing
+  const isSmallDevice = width < 375;
+  const isLargeDevice = width > 450;
+  const isTablet = width > 600;
+
   const [amount, setAmount] = useState('10');
   const [selectedMethod, setSelectedMethod] = useState('bank');
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [userGold, setUserGold] = useState(0); // Real-time balance
 
   const pricePerGram = 68.5;
   const numericAmount = parseFloat(amount) || 0;
@@ -15,140 +28,267 @@ const SellGold = ({ navigation }: any) => {
   const processingFee = subTotal * 0.10; 
   const finalAmount = subTotal - processingFee;
 
+  // Real-time Fetch: User ka apna gold balance
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const unsub = onSnapshot(doc(db, "gold_holdings", uid), (doc) => {
+      if (doc.exists()) {
+        setUserGold(doc.data().grams || 0);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   const handleContinue = () => {
+    if (numericAmount > userGold) {
+      Alert.alert("Insufficient Balance", `You only have ${userGold}g of gold available.`);
+      return;
+    }
+    if (numericAmount <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid amount to sell.");
+      return;
+    }
     setIsModalVisible(true);
   };
 
-  const handleConfirm = () => {
-    setIsModalVisible(false);
-    // Yahan hum 'hero' screen par reset kar rahe hain taake user 
-    // transaction ke baad wapas piche na ja sake
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'hero' }],
-    });
+  const handleConfirm = async () => {
+    setLoading(true);
+    
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error("User not found");
+
+      // 1. Transaction Record Save karo
+      await addDoc(collection(db, 'transactions'), {
+        userId: uid,
+        amountGrams: numericAmount,
+        type: 'SALE',
+        paymentMethod: selectedMethod,
+        finalReceived: finalAmount,
+        createdAt: serverTimestamp(),
+      });
+
+      // 2. Gold Holding Decrease karo
+      const userGoldRef = doc(db, 'gold_holdings', uid);
+      await updateDoc(userGoldRef, {
+        grams: increment(-numericAmount), // Negative value for decrement
+        value: increment(-subTotal)
+      });
+
+      setLoading(false);
+      setIsModalVisible(false);
+      Alert.alert("Success", "Gold sold successfully!");
+      
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'hero' }],
+      });
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert("Error", error.message);
+    }
   };
+
+  // Get responsive styles
+  const responsiveStyles = getResponsiveStyles(width, isSmallDevice, isLargeDevice, isTablet);
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView 
+          contentContainerStyle={[styles.scrollContent, responsiveStyles.scrollPadding]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           
-          <View style={styles.header}>
+          <View style={[styles.header, responsiveStyles.headerMargin]}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
-              <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
+              <MaterialCommunityIcons 
+                name="arrow-left" 
+                size={responsiveStyles.headerIconSize} 
+                color="#FFF" 
+              />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Sell Gold</Text>
+            <Text style={[styles.headerTitle, responsiveStyles.headerTitleSize]}>Sell Gold</Text>
           </View>
 
-          <View style={styles.priceCard}>
-            <Text style={styles.label}>CURRENT SELLING PRICE</Text>
-            <Text style={styles.priceText}>ZAR {pricePerGram} /g</Text>
+          <View style={[styles.priceCard, responsiveStyles.cardPadding, responsiveStyles.priceCardMargin]}>
+            <Text style={[styles.label, responsiveStyles.labelSize]}>AVAILABLE BALANCE</Text>
+            <Text style={[styles.priceText, responsiveStyles.priceTextSize]}>
+              {userGold.toFixed(3)} grams
+            </Text>
           </View>
 
-          <Text style={styles.sectionLabel}>Amount to Sell (grams)</Text>
-          <View style={styles.inputContainer}>
+          <Text style={[styles.sectionLabel, responsiveStyles.sectionLabelSize]}>Amount to Sell (grams)</Text>
+          <View style={[styles.inputContainer, responsiveStyles.inputHeight]}>
             <TextInput 
-              style={styles.input}
+              style={[styles.input, responsiveStyles.inputFontSize]}
               value={amount}
               onChangeText={setAmount}
               keyboardType="numeric"
               placeholder="0.00"
               placeholderTextColor="#606063"
             />
-            <View style={styles.currencyBox}>
-              <Text style={{color: '#FFF', fontWeight: 'bold'}}>Grams</Text>
+            <View style={[styles.currencyBox, responsiveStyles.currencyBoxPadding]}>
+              <Text style={[{color: '#FFF', fontWeight: 'bold'}, responsiveStyles.currencyFontSize]}>
+                Grams
+              </Text>
             </View>
           </View>
-          <Text style={styles.gramsText}>Estimated Value: ZAR {subTotal.toFixed(2)}</Text>
+          <Text style={[styles.gramsText, responsiveStyles.gramsTextSize]}>
+            Estimated Value: ZAR {subTotal.toFixed(2)}
+          </Text>
 
-          <Text style={styles.sectionLabel}>Receive Funds To</Text>
+          <Text style={[styles.sectionLabel, responsiveStyles.sectionLabelSize, { marginTop: 15 }]}>
+            Receive Funds To
+          </Text>
           
           <TouchableOpacity 
-            style={[styles.paymentCard, selectedMethod === 'bank' && styles.selectedCard]} 
+            style={[
+              styles.paymentCard, 
+              responsiveStyles.paymentCardPadding,
+              selectedMethod === 'bank' && styles.selectedCard
+            ]} 
             onPress={() => setSelectedMethod('bank')}
             activeOpacity={0.7}
           >
-            <View style={{flexDirection: 'row', alignItems: 'center'}}>
-              <MaterialCommunityIcons name="bank-outline" size={24} color="#FFF" />
-              <View style={{marginLeft: 15}}>
-                <Text style={styles.paymentTitle}>Bank Account</Text>
-                <Text style={styles.paymentSub}>Transfer to your local bank</Text>
+            <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
+              <MaterialCommunityIcons 
+                name="bank-outline" 
+                size={responsiveStyles.paymentIconSize} 
+                color="#FFF" 
+              />
+              <View style={{marginLeft: responsiveStyles.paymentMarginLeft}}>
+                <Text style={[styles.paymentTitle, responsiveStyles.paymentTitleSize]}>
+                  Bank Account
+                </Text>
+                <Text style={[styles.paymentSub, responsiveStyles.paymentSubSize]}>
+                  Transfer to your local bank
+                </Text>
               </View>
             </View>
             <MaterialCommunityIcons 
               name={selectedMethod === 'bank' ? "checkbox-marked-circle" : "checkbox-blank-circle-outline"} 
-              size={24} 
+              size={responsiveStyles.checkboxSize} 
               color={selectedMethod === 'bank' ? "#F3E932" : "#606063"} 
             />
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.paymentCard, selectedMethod === 'wallet' && styles.selectedCard]} 
+            style={[
+              styles.paymentCard, 
+              responsiveStyles.paymentCardPadding,
+              selectedMethod === 'wallet' && styles.selectedCard
+            ]} 
             onPress={() => setSelectedMethod('wallet')}
             activeOpacity={0.7}
           >
-            <View style={{flexDirection: 'row', alignItems: 'center'}}>
-              <MaterialCommunityIcons name="wallet-outline" size={24} color="#FFF" />
-              <View style={{marginLeft: 15}}>
-                <Text style={styles.paymentTitle}>App Wallet</Text>
-                <Text style={styles.paymentSub}>Instant credit to app balance</Text>
+            <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
+              <MaterialCommunityIcons 
+                name="wallet-outline" 
+                size={responsiveStyles.paymentIconSize} 
+                color="#FFF" 
+              />
+              <View style={{marginLeft: responsiveStyles.paymentMarginLeft}}>
+                <Text style={[styles.paymentTitle, responsiveStyles.paymentTitleSize]}>
+                  App Wallet
+                </Text>
+                <Text style={[styles.paymentSub, responsiveStyles.paymentSubSize]}>
+                  Instant credit to app balance
+                </Text>
               </View>
             </View>
             <MaterialCommunityIcons 
               name={selectedMethod === 'wallet' ? "checkbox-marked-circle" : "checkbox-blank-circle-outline"} 
-              size={24} 
+              size={responsiveStyles.checkboxSize} 
               color={selectedMethod === 'wallet' ? "#F3E932" : "#606063"} 
             />
           </TouchableOpacity>
 
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Sale Summary</Text>
-            <View style={styles.row}>
-              <Text style={styles.rowText}>Gold to Sell</Text>
-              <Text style={styles.rowText}>{numericAmount}g</Text>
+          <View style={[styles.summaryCard, responsiveStyles.cardPadding]}>
+            <Text style={[styles.summaryTitle, responsiveStyles.summaryTitleSize]}>Sale Summary</Text>
+            <View style={[styles.row, responsiveStyles.rowMargin]}>
+              <Text style={[styles.rowText, responsiveStyles.rowTextSize]}>Gold to Sell</Text>
+              <Text style={[styles.rowText, responsiveStyles.rowTextSize]}>{numericAmount}g</Text>
             </View>
-            <View style={styles.row}>
-              <Text style={styles.rowText}>Market Price</Text>
-              <Text style={styles.rowText}>ZAR {pricePerGram}</Text>
+            <View style={[styles.row, responsiveStyles.rowMargin]}>
+              <Text style={[styles.rowText, responsiveStyles.rowTextSize]}>Market Price</Text>
+              <Text style={[styles.rowText, responsiveStyles.rowTextSize]}>ZAR {pricePerGram}</Text>
             </View>
-            <View style={styles.row}>
-              <Text style={styles.rowText}>Service Fee (10%)</Text>
-              <Text style={[styles.rowText, {color: '#FF453A'}]}>- ZAR {processingFee.toFixed(2)}</Text>
+            <View style={[styles.row, responsiveStyles.rowMargin]}>
+              <Text style={[styles.rowText, responsiveStyles.rowTextSize]}>Service Fee (10%)</Text>
+              <Text style={[styles.rowText, responsiveStyles.rowTextSize, {color: '#FF453A'}]}>
+                - ZAR {processingFee.toFixed(2)}
+              </Text>
             </View>
-            <View style={[styles.row, {marginTop: 10, borderTopWidth: 1, borderColor: '#333', paddingTop: 10}]}>
-              <Text style={{color: '#FFF', fontWeight: 'bold'}}>You will receive</Text>
-              <Text style={{color: '#F3E932', fontWeight: 'bold', fontSize: 18}}>
+            <View style={[
+              styles.row, 
+              {
+                marginTop: responsiveStyles.dividerMarginTop, 
+                borderTopWidth: 1, 
+                borderColor: '#333', 
+                paddingTop: responsiveStyles.dividerPaddingTop
+              }
+            ]}>
+              <Text style={[styles.totalLabel, responsiveStyles.totalLabelSize]}>You will receive</Text>
+              <Text style={[styles.totalAmount, responsiveStyles.totalAmountSize]}>
                 ZAR {finalAmount > 0 ? finalAmount.toFixed(2) : "0.00"}
               </Text>
             </View>
           </View>
+
+          {/* Button scrolls with content */}
+          <TouchableOpacity 
+            style={[styles.continueBtn, responsiveStyles.buttonPadding, responsiveStyles.buttonMargin]}
+            onPress={handleContinue}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.btnText, responsiveStyles.btnTextSize]}>Confirm & Withdraw</Text>
+          </TouchableOpacity>
+
+          {/* Extra spacing at bottom */}
+          <View style={{ height: responsiveStyles.bottomSpacing }} />
         </ScrollView>
 
-        <TouchableOpacity style={styles.continueBtn} onPress={handleContinue}>
-          <Text style={styles.btnText}>Confirm & Withdraw</Text>
-        </TouchableOpacity>
-
-        <Modal
-          visible={isModalVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setIsModalVisible(false)}
-        >
+        {/* Loading Modal */}
+        <Modal visible={isModalVisible} transparent={true} animationType="fade">
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Confirm Withdrawal</Text>
-              <Text style={styles.modalText}>Are you sure you want to sell {numericAmount}g of gold?</Text>
-              <Text style={styles.modalAmount}>You will receive: ZAR {finalAmount.toFixed(2)}</Text>
-              
-              <View style={styles.modalButtonRow}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsModalVisible(false)}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
-                  <Text style={styles.confirmBtnText}>Confirm</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={[styles.modalContent, responsiveStyles.modalPadding]}>
+              {loading ? (
+                <ActivityIndicator size="large" color="#F3E932" />
+              ) : (
+                <>
+                  <Text style={[styles.modalTitle, responsiveStyles.modalTitleSize]}>
+                    Confirm Withdrawal
+                  </Text>
+                  <Text style={[styles.modalText, responsiveStyles.modalTextSize]}>
+                    Are you sure you want to sell {numericAmount}g of gold?
+                  </Text>
+                  <Text style={[styles.modalAmount, responsiveStyles.modalAmountSize]}>
+                    You will receive: ZAR {finalAmount.toFixed(2)}
+                  </Text>
+                  <View style={[styles.modalButtonRow, responsiveStyles.modalButtonRowGap]}>
+                    <TouchableOpacity 
+                      style={[styles.cancelBtn, responsiveStyles.modalButtonPadding]} 
+                      onPress={() => setIsModalVisible(false)}
+                    >
+                      <Text style={[styles.cancelBtnText, responsiveStyles.modalBtnTextSize]}>
+                        Cancel
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.confirmBtn, responsiveStyles.modalButtonPadding]} 
+                      onPress={handleConfirm}
+                    >
+                      <Text style={[styles.confirmBtnText, responsiveStyles.modalBtnTextSize]}>
+                        Confirm
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
           </View>
         </Modal>
@@ -158,39 +298,286 @@ const SellGold = ({ navigation }: any) => {
   );
 };
 
+// Function to calculate responsive styles based on screen width
+function getResponsiveStyles(width: number, isSmall: boolean, isLarge: boolean, isTablet: boolean) {
+  const basePadding = isSmall ? 12 : isLarge ? 24 : 20;
+  const cardPadding = isSmall ? 14 : isLarge ? 24 : 20;
+
+  return {
+    scrollPadding: {
+      padding: basePadding,
+      paddingTop: isSmall ? 15 : 20,
+    },
+    headerMargin: {
+      marginBottom: isSmall ? 15 : 20,
+    },
+    headerIconSize: isSmall ? 20 : 24,
+    headerTitleSize: {
+      fontSize: isSmall ? 16 : isLarge ? 20 : 18,
+    },
+    cardPadding: {
+      padding: cardPadding,
+    },
+    priceCardMargin: {
+      marginBottom: isSmall ? 15 : 20,
+    },
+    labelSize: {
+      fontSize: isSmall ? 9 : isLarge ? 12 : 11,
+    },
+    priceTextSize: {
+      fontSize: isSmall ? 20 : isLarge ? 28 : 24,
+      marginTop: isSmall ? 3 : 5,
+    },
+    sectionLabelSize: {
+      fontSize: isSmall ? 11 : isLarge ? 13 : 12,
+      marginBottom: isSmall ? 8 : 10,
+      marginTop: isSmall ? 8 : 10,
+    },
+    inputHeight: {
+      height: isSmall ? 50 : isTablet ? 70 : 60,
+    },
+    inputFontSize: {
+      fontSize: isSmall ? 16 : isLarge ? 22 : 20,
+    },
+    currencyBoxPadding: {
+      padding: isSmall ? 6 : 8,
+    },
+    currencyFontSize: {
+      fontSize: isSmall ? 11 : isLarge ? 14 : 12,
+    },
+    gramsTextSize: {
+      fontSize: isSmall ? 11 : 12,
+      marginTop: isSmall ? 8 : 10,
+      marginBottom: isSmall ? 15 : 20,
+    },
+    paymentCardPadding: {
+      padding: cardPadding,
+      marginBottom: isSmall ? 10 : 15,
+    },
+    paymentIconSize: isSmall ? 20 : 24,
+    paymentMarginLeft: isSmall ? 12 : 15,
+    paymentTitleSize: {
+      fontSize: isSmall ? 13 : isLarge ? 16 : 14,
+    },
+    paymentSubSize: {
+      fontSize: isSmall ? 10 : 12,
+    },
+    checkboxSize: isSmall ? 20 : 24,
+    rowMargin: {
+      marginVertical: isSmall ? 3 : 4,
+    },
+    rowTextSize: {
+      fontSize: isSmall ? 12 : isLarge ? 15 : 14,
+    },
+    summaryTitleSize: {
+      fontSize: isSmall ? 13 : isLarge ? 16 : 14,
+      marginBottom: isSmall ? 8 : 10,
+    },
+    dividerMarginTop: isSmall ? 8 : 10,
+    dividerPaddingTop: isSmall ? 8 : 10,
+    totalLabelSize: {
+      fontSize: isSmall ? 13 : isLarge ? 15 : 14,
+    },
+    totalAmountSize: {
+      fontSize: isSmall ? 16 : isLarge ? 22 : 18,
+    },
+    buttonPadding: {
+      padding: isSmall ? 14 : isLarge ? 20 : 18,
+    },
+    buttonMargin: {
+      marginTop: isSmall ? 15 : 20,
+      marginHorizontal: 0,
+    },
+    btnTextSize: {
+      fontSize: isSmall ? 14 : isLarge ? 17 : 16,
+    },
+    bottomSpacing: isSmall ? 10 : 20,
+    // Modal styles
+    modalPadding: {
+      padding: isSmall ? 20 : 25,
+    },
+    modalTitleSize: {
+      fontSize: isSmall ? 18 : isLarge ? 22 : 20,
+      marginBottom: isSmall ? 12 : 15,
+    },
+    modalTextSize: {
+      fontSize: isSmall ? 12 : 14,
+      marginBottom: isSmall ? 8 : 10,
+    },
+    modalAmountSize: {
+      fontSize: isSmall ? 18 : isLarge ? 24 : 22,
+      marginBottom: isSmall ? 20 : 25,
+    },
+    modalButtonRowGap: {
+      gap: isSmall ? 8 : 10,
+    },
+    modalButtonPadding: {
+      padding: isSmall ? 12 : 15,
+    },
+    modalBtnTextSize: {
+      fontSize: isSmall ? 13 : isLarge ? 15 : 14,
+    },
+  };
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0B0C' },
-  scrollContent: { padding: 20, paddingBottom: 120 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginLeft: 15 },
-  priceCard: { backgroundColor: '#1C1C1E', padding: 20, borderRadius: 15, marginBottom: 20 },
-  label: { color: '#8E8E93', fontSize: 11, fontWeight: 'bold' },
-  priceText: { color: '#F3E932', fontSize: 24, fontWeight: 'bold', marginTop: 5 },
-  sectionLabel: { color: '#8E8E93', fontSize: 12, marginBottom: 10, marginTop: 10 },
-  inputContainer: { flexDirection: 'row', backgroundColor: '#1C1C1E', borderRadius: 15, alignItems: 'center', paddingHorizontal: 15, height: 60 },
-  input: { flex: 1, color: '#FFF', fontSize: 20, fontWeight: 'bold' },
-  currencyBox: { backgroundColor: '#333', padding: 8, borderRadius: 8 },
-  gramsText: { color: '#8E8E93', fontSize: 12, marginTop: 10, marginBottom: 20 },
-  paymentCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', padding: 20, borderRadius: 15, marginBottom: 15, borderWidth: 1, borderColor: 'transparent' },
-  selectedCard: { borderColor: '#F3E932' },
-  paymentTitle: { color: '#FFF', fontWeight: 'bold' },
-  paymentSub: { color: '#606063', fontSize: 12 },
-  summaryCard: { backgroundColor: '#1C1C1E', padding: 20, borderRadius: 15, marginTop: 10 },
-  summaryTitle: { color: '#FFF', fontWeight: 'bold', marginBottom: 10 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 4 },
-  rowText: { color: '#8E8E93', fontSize: 14 },
-  continueBtn: { backgroundColor: '#F3E932', margin: 20, padding: 18, borderRadius: 15, alignItems: 'center', position: 'absolute', bottom: 0, left: 0, right: 0 },
-  btnText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1C1C1E', padding: 25, borderRadius: 20, width: '100%', alignItems: 'center' },
-  modalTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
-  modalText: { color: '#8E8E93', textAlign: 'center', marginBottom: 10 },
-  modalAmount: { color: '#F3E932', fontSize: 22, fontWeight: 'bold', marginBottom: 25 },
-  modalButtonRow: { flexDirection: 'row', width: '100%', gap: 10 },
-  cancelBtn: { flex: 1, padding: 15, backgroundColor: '#333', borderRadius: 12, alignItems: 'center' },
-  cancelBtnText: { color: '#FFF', fontWeight: 'bold' },
-  confirmBtn: { flex: 1, padding: 15, backgroundColor: '#F3E932', borderRadius: 12, alignItems: 'center' },
-  confirmBtnText: { color: '#000', fontWeight: 'bold' }
+  container: { 
+    flex: 1, 
+    backgroundColor: '#0B0B0C' 
+  },
+  scrollContent: { 
+    paddingBottom: 60,
+     padding: SIZES.padding 
+  },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  headerTitle: { 
+    color: '#FFF', 
+    fontWeight: 'bold', 
+    marginLeft: 15 
+  },
+  priceCard: { 
+    backgroundColor: '#1C1C1E', 
+    borderRadius: 15 
+  },
+  label: { 
+    color: '#8E8E93', 
+    fontWeight: 'bold' 
+  },
+  priceText: { 
+    color: '#F3E932', 
+    fontWeight: 'bold' 
+  },
+  sectionLabel: { 
+    color: '#8E8E93' 
+  },
+  inputContainer: { 
+    flexDirection: 'row', 
+    backgroundColor: '#1C1C1E', 
+    borderRadius: 15, 
+    alignItems: 'center', 
+    paddingHorizontal: 15 
+  },
+  input: { 
+    flex: 1, 
+    color: '#FFF', 
+    fontWeight: 'bold' 
+  },
+  currencyBox: { 
+    backgroundColor: '#333', 
+    borderRadius: 8 
+  },
+  gramsText: { 
+    color: '#8E8E93' 
+  },
+  paymentCard: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    backgroundColor: '#1C1C1E', 
+    borderRadius: 15, 
+    borderWidth: 1, 
+    borderColor: 'transparent' 
+  },
+  selectedCard: { 
+    borderColor: '#F3E932' 
+  },
+  paymentTitle: { 
+    color: '#FFF', 
+    fontWeight: 'bold' 
+  },
+  paymentSub: { 
+    color: '#606063',
+    marginTop: 2
+  },
+  summaryCard: { 
+    backgroundColor: '#1C1C1E', 
+    borderRadius: 15, 
+    marginTop: 15 
+  },
+  summaryTitle: { 
+    color: '#FFF', 
+    fontWeight: 'bold' 
+  },
+  row: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between' 
+  },
+  rowText: { 
+    color: '#8E8E93' 
+  },
+  totalLabel: { 
+    color: '#FFF', 
+    fontWeight: 'bold' 
+  },
+  totalAmount: { 
+    color: '#F3E932', 
+    fontWeight: 'bold' 
+  },
+  continueBtn: { 
+    backgroundColor: '#F3E932', 
+    borderRadius: 15, 
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 0
+  },
+  btnText: { 
+    color: '#000', 
+    fontWeight: 'bold' 
+  },
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.7)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 20 
+  },
+  modalContent: { 
+    backgroundColor: '#1C1C1E', 
+    borderRadius: 20, 
+    width: '100%', 
+    alignItems: 'center' 
+  },
+  modalTitle: { 
+    color: '#FFF', 
+    fontWeight: 'bold' 
+  },
+  modalText: { 
+    color: '#8E8E93', 
+    textAlign: 'center' 
+  },
+  modalAmount: { 
+    color: '#F3E932', 
+    fontWeight: 'bold' 
+  },
+  modalButtonRow: { 
+    flexDirection: 'row', 
+    width: '100%' 
+  },
+  cancelBtn: { 
+    flex: 1, 
+    backgroundColor: '#333', 
+    borderRadius: 12, 
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cancelBtnText: { 
+    color: '#FFF', 
+    fontWeight: 'bold' 
+  },
+  confirmBtn: { 
+    flex: 1,
+    backgroundColor: '#F3E932', 
+    borderRadius: 12, 
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  confirmBtnText: { 
+    color: '#000', 
+    fontWeight: 'bold' 
+  }
 });
 
 export default SellGold;

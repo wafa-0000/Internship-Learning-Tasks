@@ -6,18 +6,13 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-// Firebase Imports
 import { auth } from '../../firebaseConfig';
 import { sendPasswordResetEmail } from "firebase/auth";
-
 const ForgotPasswordScreen = () => {
     const navigation = useNavigation<any>();
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
-
     const handleResetPassword = async () => {
-        // Validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!email.trim()) {
             Alert.alert("Error", "Please enter your email address.");
@@ -27,13 +22,10 @@ const ForgotPasswordScreen = () => {
             Alert.alert("Invalid Email", "Please enter a valid email format.");
             return;
         }
-
         setLoading(true);
         try {
-            // Firebase Reset Logic
             await sendPasswordResetEmail(auth, email);
-            
-            setLoading(false);
+        setLoading(false);
             Alert.alert(
                 "Email Sent", 
                 "A password reset link has been sent to your email.",
@@ -48,7 +40,6 @@ const ForgotPasswordScreen = () => {
             Alert.alert("Error", msg);
         }
     };
-
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" />
@@ -59,18 +50,15 @@ const ForgotPasswordScreen = () => {
             >
                 <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                     <View style={styles.content}>
-                        {/* Back Button */}
                         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                             <Text style={{ color: '#FFF', fontSize: 20 }}>←</Text>
                         </TouchableOpacity>
-
                         <View style={styles.header}>
                             <Text style={styles.title}>Forgot Password?</Text>
                             <Text style={styles.subtitle}>
                                 Enter your email address and we'll send you a link to reset your password.
                             </Text>
                         </View>
-
                         <View style={styles.formContainer}>
                             <Text style={styles.label}>Email Address</Text>
                             <View style={styles.inputWrapper}>
@@ -84,7 +72,6 @@ const ForgotPasswordScreen = () => {
                                     onChangeText={setEmail}
                                 />
                             </View>
-
                             <TouchableOpacity 
                                 style={[styles.resetButton, loading && { opacity: 0.8 }]} 
                                 onPress={handleResetPassword}
@@ -96,7 +83,6 @@ const ForgotPasswordScreen = () => {
                                     <Text style={styles.resetButtonText}>Send Reset Link</Text>
                                 )}
                             </TouchableOpacity>
-
                             <TouchableOpacity 
                                 style={styles.backToSignIn} 
                                 onPress={() => navigation.navigate('Signin')}
@@ -110,7 +96,6 @@ const ForgotPasswordScreen = () => {
         </SafeAreaView>
     );
 };
-
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0B0B0C' },
     content: { flex: 1, paddingHorizontal: 24 },
@@ -152,5 +137,4 @@ const styles = StyleSheet.create({
     backToSignIn: { marginTop: 25, alignItems: 'center' },
     backToSignInText: { color: '#606063', fontSize: 14 }
 });
-
 export default ForgotPasswordScreen;

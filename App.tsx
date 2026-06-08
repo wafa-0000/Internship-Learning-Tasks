@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react'; 
 import { View, StyleSheet, ActivityIndicator } from 'react-native'; 
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators, TransitionSpecs } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+
+// Firebase Imports
 import { AuthContextProvider } from './src/Context/Authcontext';
-import { auth } from './src/firebaseConfig'; 
+import { auth, db } from './src/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore'; 
+
+// Screens Import
 import SplashScreen from './src/screens/Splash/splashscreen';
 import Onboarding1 from './src/screens/onboarding/onboardingscreen1';
 import Onboarding2 from './src/screens/onboarding/onboardingscreen2';
@@ -44,16 +49,30 @@ import DashboardTabs from './src/screens/Tabs/Dashboardtabs';
 import MoneyWalletTabs from './src/screens/Tabs/Moneywallettabs';
 import NewsTabs from './src/screens/Tabs/Newstabs';
 import ProfileTabs from './src/screens/Tabs/Profiletabs';
+
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
 interface TabIconProps {
   color: string;
   focused: boolean;
 }
+
+// --- Slide Right Animation Configuration ---
+const slideRightConfig = {
+  gestureDirection: 'horizontal',
+  transitionSpec: {
+    open: TransitionSpecs.TransitionIOSSpec,
+    close: TransitionSpecs.TransitionIOSSpec,
+  },
+  cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+};
+
+// --- Tab Navigator Component ---
 function TabNavigator() {
   return (
     <Tab.Navigator
-      initialRouteName="GOLD VAULT"
+      initialRouteName="MONEY WALLET"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#F3E932',
@@ -127,12 +146,31 @@ function TabNavigator() {
     </Tab.Navigator>
   );
 }
+
+// --- Root Navigation Logic ---
 const RootNavigation = () => {
   const [user, setUser] = useState<any>(null);
   const [initializing, setInitializing] = useState(true);
+  const [isAppLocked, setIsAppLocked] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          if (userDoc.exists() && userDoc.data().isBiometricEnabled === true) {
+            setIsAppLocked(true);
+          } else {
+            setIsAppLocked(false);
+          }
+        } catch (error) {
+          console.error("Biometric Check Error:", error);
+          setIsAppLocked(false);
+        }
+      } else {
+        setIsAppLocked(false);
+      }
+
       setUser(currentUser);
       if (initializing) setInitializing(false);
     });
@@ -147,12 +185,24 @@ const RootNavigation = () => {
     );
   }
 
+  if (user && isAppLocked) {
+    return <SignInScreen onSuccess={() => setIsAppLocked(false)} />;
+  }
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        ...slideRightConfig as any,
+      }}
+    >
       {!user ? (
-        // Public / Auth Screens
         <>
-          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen 
+            name="Splash" 
+            component={SplashScreen}
+            options={{ cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid }}
+          />
           <Stack.Screen name="Onboarding1" component={Onboarding1} />
           <Stack.Screen name="Onboarding2" component={Onboarding2} />
           <Stack.Screen name="Onboarding3" component={Onboarding3} />
@@ -164,7 +214,6 @@ const RootNavigation = () => {
           <Stack.Screen name="AddressScreen" component={AddressScreen} />
         </>
       ) : (
-        // Private / App Screens
         <>
           <Stack.Screen name="hero" component={TabNavigator} />
           <Stack.Screen name="Balance" component={BalanceScreen} />
@@ -173,7 +222,6 @@ const RootNavigation = () => {
           <Stack.Screen name="TransactionVerify" component={TransactionVerify} />
           <Stack.Screen name="Receive" component={Receive} />
           <Stack.Screen name="Deposit" component={Deposit} />
-          <Stack.Screen name="AddressScreen" component={AddressScreen} />
           <Stack.Screen name="UploadDoc" component={UploadDocScreen} />
           <Stack.Screen name="CardListScreen" component={CardListScreen} />
           <Stack.Screen name="AddCardScreen" component={AddCardScreen} />
@@ -190,8 +238,7 @@ const RootNavigation = () => {
           <Stack.Screen name="Security" component={Security} />
           <Stack.Screen name="NewsDetail" component={NewsDetail} />
           <Stack.Screen name="MarketNews" component={MarketNews} />
-          {/* User agar logged in ho but verification reh jaye toh yahan bhi screen add kar sakte hain */}
-          <Stack.Screen name="Verification" component={Verification} />
+          <Stack.Screen name="AddressScreen" component={AddressScreen} />
         </>
       )}
     </Stack.Navigator>

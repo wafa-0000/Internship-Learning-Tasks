@@ -1,13 +1,47 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, SafeAreaView, StyleSheet, ScrollView, Dimensions, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Dimensions, Modal, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
+// --- IMPORT FIREBASE ---
+import { db, auth } from '../../firebaseConfig'; // Apne project ke hisab se path set karen
+import { doc, onSnapshot } from 'firebase/firestore';
+import { SIZES } from '../../utils/constants/theme';
 
 const { width } = Dimensions.get('window');
 
 const Sell = ({ navigation }: any) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState('ZAR');
+
+  // --- BACKEND STATES ---
+  const [goldData, setGoldData] = useState({ grams: 0, value: 0 });
+  const [graphData, setGraphData] = useState([0, 0, 0, 0, 0, 0]);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    // Real-time Gold Holdings
+    const unsubGold = onSnapshot(doc(db, "gold_holdings", uid), (doc) => {
+      if (doc.exists()) {
+        setGoldData(doc.data() as any);
+      }
+    });
+
+    // Real-time Market Graph Data
+    const unsubGraph = onSnapshot(doc(db, "market_data", "gold_price"), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setGraphData(data.history || [0, 0, 0, 0, 0, 0]);
+      }
+    });
+
+    return () => {
+      unsubGold();
+      unsubGraph();
+    };
+  }, []);
 
   const currencies = [
     { label: 'ZAR - South African Rand', value: 'ZAR' },
@@ -23,7 +57,6 @@ const Sell = ({ navigation }: any) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Gold Vault</Text>
           <TouchableOpacity style={styles.historyBtn}>
@@ -33,12 +66,13 @@ const Sell = ({ navigation }: any) => {
 
         <View style={styles.mainCard}>
           <Text style={styles.label}>TOTAL GOLD HOLDINGS</Text>
-          <Text style={styles.goldText}>124.50 <Text style={styles.grams}>grams</Text></Text>
+          <Text style={styles.goldText}>{goldData.grams} <Text style={styles.grams}>grams</Text></Text>
         </View>
+
         <View style={styles.valueSection}>
           <View>
             <Text style={styles.label}>VALUE</Text>
-            <Text style={styles.valueAmount}>{selectedCurrency} 100</Text>
+            <Text style={styles.valueAmount}>{selectedCurrency} {goldData.value}</Text>
           </View>
           
           <TouchableOpacity 
@@ -49,6 +83,7 @@ const Sell = ({ navigation }: any) => {
             <MaterialCommunityIcons name="chevron-down" size={16} color="white" />
           </TouchableOpacity>
         </View>
+
         <Modal
           visible={modalVisible}
           transparent={true}
@@ -88,7 +123,7 @@ const Sell = ({ navigation }: any) => {
           <LineChart
             data={{
               labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-              datasets: [{ data: [2600, 1950, 1300, 650, 0, 500] }]
+              datasets: [{ data: graphData }]
             }}
             width={width - 40}
             height={180}
@@ -103,6 +138,7 @@ const Sell = ({ navigation }: any) => {
             style={{ borderRadius: 10 }}
           />
         </View>
+
         <TouchableOpacity 
           style={styles.buyBtn}
           onPress={() => navigation.navigate('SellGold')}
@@ -118,18 +154,18 @@ const Sell = ({ navigation }: any) => {
            </View>
            <View style={{marginLeft: 15, flex: 1}}>
               <Text style={{color:'#FFF', fontWeight:'bold'}}>View All Transactions</Text>
-            
             <Text style={styles.transactionSub}>Complete transaction history</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#888" />
+           </View>
+           <MaterialCommunityIcons name="chevron-right" size={24} color="#888" />
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 };
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0B0C' },
-  scrollContent: { padding: 20, paddingTop: 40 },
+  scrollContent: {  padding: SIZES.padding  , paddingTop: 40 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   headerTitle: { color: 'white', fontSize: 24, fontWeight: 'bold' },
   historyBtn: { backgroundColor: '#1C1C1E', padding: 10, borderRadius: 12 },
@@ -154,7 +190,6 @@ const styles = StyleSheet.create({
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
   itemText: { color: '#FFF', fontSize: 14 },
   activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F3E932' },
-
   priceCard: { backgroundColor: '#1C1C1E', padding: 20, borderRadius: 25, marginTop: 15 },
   buyBtn: { 
     backgroundColor: '#F3E932', 
@@ -171,12 +206,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold'
   },
-
   sectionTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginTop: 30, marginBottom: 15 },
   transactionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', padding: 18, borderRadius: 22 },
   transactionIconBox: { backgroundColor: '#2C2C2E', padding: 12, borderRadius: 14 },
-  transactionDetails: { flex: 1, marginLeft: 15 },
-  transactionMain: { color: 'white', fontSize: 15 },
   transactionSub: { color: '#606063', fontSize: 12, marginTop: 3 },
 });
 

@@ -1,7 +1,26 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, SafeAreaView } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TextInput, 
+  ScrollView, 
+  TouchableOpacity, 
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
+  ActivityIndicator,
+  Alert
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-const PhysicalCardApplication = ({ navigation }: any) => {
+import { auth, db } from '../../../firebaseConfig'; 
+import { collection, addDoc } from 'firebase/firestore'; 
+import { SIZES } from '../../../utils/constants/theme';
+const PhysicalCardApplication = ({ navigation, route }: any) => {
+  const { userName } = route.params || { userName: 'User' };
   const [limit, setLimit] = useState('');
   const [address, setAddress] = useState(''); 
   const [city, setCity] = useState('');
@@ -9,135 +28,125 @@ const PhysicalCardApplication = ({ navigation }: any) => {
   const [zip, setZip] = useState('');
   const [country, setCountry] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const handleCreateCard = () => {
+  const [loading, setLoading] = useState(false);
+  const generateCardNumber = () => {
+    return Array.from({ length: 16 }, () => Math.floor(Math.random() * 10)).join('');
+  };
+  const handleCreateCard = async () => {
     if (!limit || !address || !city || !cardState || !zip || !country) {
-      alert("please fill in all the details! ");
+      Alert.alert("Error", "Please fill in all the details!");
       return;
     }
-    setIsModalVisible(true); 
+    setLoading(true);
+    try {
+      await addDoc(collection(db, "cards"), {
+        number: generateCardNumber(),
+        balance: 0,
+        status: 'pending',
+        holder: userName,
+        type: 'PHYSICAL',
+        limit: `$${limit}`,
+        address: `${address}, ${city}, ${cardState}, ${zip}, ${country}`,
+        createdAt: new Date(),
+        userId: auth.currentUser?.uid
+      });
+      setIsModalVisible(true);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Failed to apply for card. Try again.");
+    } finally {
+      setLoading(false);
+    }
   };
   return (
-    <SafeAreaView style={styles.mainWrapper}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Physical Card Application</Text>
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Monthly Spending Limit</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="$5000" 
-            placeholderTextColor="#444" 
-            keyboardType="numeric" 
-            value={limit} 
-            onChangeText={setLimit} 
-          />
-          <Text style={styles.hint}>maximum amount you can spend per month </Text>
-        </View>
-        <View style={styles.infoBox}>
-          <MaterialCommunityIcons name="map-marker-outline" size={24} color="#F3E932" />
-          <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.infoTitle}>Delivery Address Required</Text>
-            <Text style={styles.infoSub}>Your physical card will be delivered to this address</Text>
-          </View>
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Street Address</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="123 Main Street, Apt 4B" 
-            placeholderTextColor="#444" 
-            value={address} 
-            onChangeText={setAddress}
-          />
-        </View>
-        <View style={styles.row}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <Text style={styles.label}>City</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="New York" 
-              placeholderTextColor="#444" 
-              value={city} 
-              onChangeText={setCity}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>State</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="NY" 
-              placeholderTextColor="#444" 
-              value={cardState} 
-              onChangeText={setCardState}
-            />
-          </View>
-        </View>
-        <View style={styles.row}>
-          <View style={{ flex: 1, marginRight: 10 }}>
-            <Text style={styles.label}>ZIP Code</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="10001" 
-              placeholderTextColor="#444" 
-              value={zip} 
-              onChangeText={setZip}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Country</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="United States" 
-              placeholderTextColor="#444" 
-              value={country} 
-              onChangeText={setCountry}
-            />
-          </View>
-        </View>
-        <TouchableOpacity style={styles.button} onPress={handleCreateCard}>
-          <Text style={styles.buttonText}>Create Physical Card</Text>
-        </TouchableOpacity>
-        <Modal 
-          animationType="fade" 
-          transparent={true} 
-          visible={isModalVisible}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.successIcon}>
-                <MaterialCommunityIcons name="check-bold" size={40} color="#000" />
-              </View>
-              <Text style={styles.modalTitle}>Card Created</Text>
-              <Text style={styles.modalSub}>
-                Your physical card is on its way and will soon be delivered to your specified location
-              </Text>
-              <TouchableOpacity 
-                style={styles.closeBtn} 
-                onPress={() => { 
-                  setIsModalVisible(false);
-                  navigation.navigate('Home'); 
-                }}
-              >
-                <Text style={styles.closeBtnText}>Done</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <SafeAreaView style={styles.mainWrapper}>
+          <ScrollView 
+            contentContainerStyle={styles.container}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
               </TouchableOpacity>
+              <Text style={styles.title}>Physical Card Application</Text>
             </View>
-          </View>
-        </Modal>
-
-      </ScrollView>
-    </SafeAreaView>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Monthly Spending Limit</Text>
+              <TextInput 
+                style={styles.input} 
+                placeholder="$5000" 
+                placeholderTextColor="#444" 
+                keyboardType="numeric" 
+                value={limit} 
+                onChangeText={setLimit} 
+              />
+              <Text style={styles.hint}>maximum amount you can spend per month</Text>
+            </View>
+            <View style={styles.infoBox}>
+              <MaterialCommunityIcons name="map-marker-outline" size={24} color="#F3E932" />
+              <View style={{ marginLeft: 10, flex: 1 }}>
+                <Text style={styles.infoTitle}>Delivery Address Required</Text>
+                <Text style={styles.infoSub}>Your physical card will be delivered to this address</Text>
+              </View>
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Street Address</Text>
+              <TextInput style={styles.input} placeholder="123 Main Street, Apt 4B" placeholderTextColor="#444" value={address} onChangeText={setAddress} />
+            </View>
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={styles.label}>City</Text>
+                <TextInput style={styles.input} placeholder="New York" placeholderTextColor="#444" value={city} onChangeText={setCity} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>State</Text>
+                <TextInput style={styles.input} placeholder="NY" placeholderTextColor="#444" value={cardState} onChangeText={setCardState} />
+              </View>
+            </View>
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={styles.label}>ZIP Code</Text>
+                <TextInput style={styles.input} placeholder="10001" placeholderTextColor="#444" keyboardType="numeric" value={zip} onChangeText={setZip} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Country</Text>
+                <TextInput style={styles.input} placeholder="United States" placeholderTextColor="#444" value={country} onChangeText={setCountry} />
+              </View>
+            </View>
+            <TouchableOpacity style={styles.button} onPress={handleCreateCard} disabled={loading}>
+              {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Create Physical Card</Text>}
+            </TouchableOpacity>
+            <Modal animationType="fade" transparent={true} visible={isModalVisible}>
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <View style={styles.successIcon}><MaterialCommunityIcons name="check-bold" size={40} color="#000" /></View>
+                  <Text style={styles.modalTitle}>Card Created</Text>
+                  <Text style={styles.modalSub}>Your physical card is on its way and will soon be delivered to your specified location</Text>
+                  <TouchableOpacity style={styles.closeBtn} onPress={() => { setIsModalVisible(false); navigation.navigate('AddCardScreen'); }}>
+                    <Text style={styles.closeBtnText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+          </ScrollView>
+        </SafeAreaView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 };
 const styles = StyleSheet.create({
   mainWrapper: { flex: 1, backgroundColor: '#0B0B0C' },
-  container: { padding: 20 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 25, marginTop: 25 },
-  backBtn: { marginRight: 15, backgroundColor: '#1C1C1E', padding: 8, borderRadius: 10,marginTop: 25 },
-  title: { color: '#FFF', fontSize: 18, fontWeight: 'bold',marginTop: 25},
+  container: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: SIZES.padding  },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
+  backBtn: { marginRight: 15, backgroundColor: '#1C1C1E', padding: 8, borderRadius: 10 },
+  title: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   inputGroup: { marginBottom: 20 },
   label: { color: '#8E8E93', marginBottom: 8, fontSize: 13 },
   hint: { color: '#444', fontSize: 11, marginTop: 5 },

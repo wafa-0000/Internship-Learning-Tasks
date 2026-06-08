@@ -30,5 +30,7 @@
     "plugins": [
       "@react-native-firebase/app"
     ]
+    
   }
 }
+

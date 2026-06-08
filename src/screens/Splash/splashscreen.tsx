@@ -4,15 +4,12 @@ import { View, Image, StyleSheet, StatusBar } from 'react-native';
 
 const SplashScreen = () => {
   const navigation = useNavigation<any>();
-
   useEffect(() => {
     const timer = setTimeout(() => {
       navigation.replace('Onboarding1');
     }, 3000);
-
     return () => clearTimeout(timer);
   }, [navigation]);
-
   return (
     <View style={styles.container}>
       <StatusBar hidden={true} />
@@ -24,7 +21,6 @@ const SplashScreen = () => {
     </View>
   );
 };
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -37,5 +33,4 @@ const styles = StyleSheet.create({
     height: 220,
   },
 });
-
 export default SplashScreen;

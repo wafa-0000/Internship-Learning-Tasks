@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, TextInput, 
-  SafeAreaView, ScrollView, Alert, ActivityIndicator,
+   ScrollView, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig';
 import { doc, setDoc, getDoc } from "firebase/firestore";
-
 const InputField = ({ label, Placeholder, value, onChangeText }: any) => (
     <View style={styles.inputContainer}>
       <Text style={styles.label}>{label}</Text>
@@ -20,7 +20,6 @@ const InputField = ({ label, Placeholder, value, onChangeText }: any) => (
       />
     </View>
 );
-
 const AddressScreen = ({ navigation }: any) => {
   const [address1, setAddress1] = useState('');
   const [address2, setAddress2] = useState('');
@@ -31,9 +30,7 @@ const AddressScreen = ({ navigation }: any) => {
   const [addressType, setAddressType] = useState('');
   
   const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true); // Data fetch hone tak loader dikhane ke liye
-
-  // --- 1. Firestore se purana data mangwana ---
+  const [fetching, setFetching] = useState(true); 
   useEffect(() => {
     const fetchSavedData = async () => {
       const user = auth.currentUser;
@@ -44,7 +41,6 @@ const AddressScreen = ({ navigation }: any) => {
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            // Agar address ka object database mein hai toh fields fill kar do
             if (data.address) {
               setAddress1(data.address.street1 || '');
               setAddress2(data.address.street2 || '');
@@ -62,22 +58,17 @@ const AddressScreen = ({ navigation }: any) => {
         }
       }
     };
-
     fetchSavedData();
   }, []);
-
-  // --- 2. Data Save karne ka function ---
   const handleAddress = async () => {
     if (!address1 || !country || !city) {
       Alert.alert("Required Fields", "Please fill in all the mandatory fields to proceed.");
       return;
     }
-
     setLoading(true);
     try {
       const user = auth.currentUser;
       if (user) {
-        // Sirf address update karega, kycStatus ko nahi cheray ga
         await setDoc(doc(db, "users", user.uid), {
           address: {
             street1: address1,
@@ -88,9 +79,7 @@ const AddressScreen = ({ navigation }: any) => {
             zip: postalCode,
             type: addressType
           }
-          // Note: Hum yahan kycStatus: "pending" nahi likh rahe taake Verified status kharab na ho
         }, { merge: true });
-
         setLoading(false);
         Alert.alert("Success", "Your address has been updated successfully.");
         navigation.navigate('UploadDoc');
@@ -100,8 +89,6 @@ const AddressScreen = ({ navigation }: any) => {
       Alert.alert("Database Error", error.message || "Something went wrong.");
     }
   };
-
-  // Screen load hote waqt loading spinner
   if (fetching) {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center' }]}>
@@ -110,7 +97,6 @@ const AddressScreen = ({ navigation }: any) => {
       </SafeAreaView>
     );
   }
-
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -123,7 +109,6 @@ const AddressScreen = ({ navigation }: any) => {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add / Edit Address</Text>
         </View>
-
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -136,7 +121,6 @@ const AddressScreen = ({ navigation }: any) => {
           <InputField label="City" Placeholder="Enter City Name" value={city} onChangeText={setCity} />
           <InputField label="Postal Code" Placeholder="Enter Zip/Postal Code" value={postalCode} onChangeText={setPostalCode} />
           <InputField label="Address Type" Placeholder="Home / Office" value={addressType} onChangeText={setAddressType} />
-
           <TouchableOpacity 
             style={[styles.yellowBtn, loading && { opacity: 0.7 }]}
             onPress={handleAddress}
@@ -149,18 +133,16 @@ const AddressScreen = ({ navigation }: any) => {
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0B0C' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 20, marginTop: 30 },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 20},
   backBtn: { width: 35, height: 35, backgroundColor: '#121214', borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#1C1C1E' },
   headerTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginLeft: 15 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
   inputContainer: { marginBottom: 15 },
   label: { color: '#FFF', fontSize: 12, marginBottom: 8, fontWeight: '600' },
   input: { backgroundColor: '#121214', borderRadius: 10, height: 50, paddingHorizontal: 15, color: '#FFF', borderWidth: 1, borderColor: '#1C1C1E' },
   yellowBtn: { backgroundColor: '#F3E932', height: 55, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
   btnText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
 });
-
 export default AddressScreen;

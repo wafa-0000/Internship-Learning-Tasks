@@ -3,6 +3,8 @@ import { hideNavigationBar } from 'react-native-navigation-bar-color';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, Image, StatusBar, Dimensions } from 'react-native';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
+// import { SIZES } from '../../utils/constants/theme';
+
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
@@ -14,13 +16,19 @@ type RootStackParamList = {
 
 const Onboarding1 = () => {
     const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+    
+    const handleNavigation = (screenName: string) => {
+        navigation.navigate(screenName as never);
+    };
+
     useEffect(() => {
         try {
-            hideNavigationBar();
+            hideNavigationBar?.();
         } catch (e) {
             console.log('Navigation bar hide failed:', e);
         }
     }, []);
+
     return (
         <View style={styles.container}>
             <StatusBar hidden={true} />
@@ -33,7 +41,7 @@ const Onboarding1 = () => {
                 <View style={styles.centerContent}>
                     <View style={styles.iconContainer}>
                         <Image
-                            source={require('../../../assets/lightningicon.png')}
+                            source={require('../../../assets/lightningicon1.png')}
                             style={styles.LightningIcon}
                             resizeMode="contain"
                         />
@@ -43,10 +51,10 @@ const Onboarding1 = () => {
                     </Text>
                 </View>
                 <View style={styles.footer}>
-                    <TouchableOpacity style={styles.nextButton} onPress={() => navigation.navigate('Onboarding2')}>
+                    <TouchableOpacity style={styles.nextButton} onPress={() => handleNavigation('Onboarding2')}>
                         <Text style={styles.nextText}>Next   {'>'}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.skipButton} onPress={() => navigation.navigate('Welcome')}>
+                    <TouchableOpacity style={styles.skipButton} onPress={() => handleNavigation('Welcome')}>
                         <Text style={styles.skipText}>Skip</Text>
                     </TouchableOpacity>
                 </View>
@@ -54,6 +62,7 @@ const Onboarding1 = () => {
         </View>
     );
 };
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -135,4 +144,5 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
 });
+
 export default Onboarding1;

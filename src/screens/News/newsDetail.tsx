@@ -1,23 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
-  Image,
-  Linking,
-  ScrollView,
-  ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Image, StatusBar
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-
+import YoutubePlayer from "react-native-youtube-iframe";
+import { WebView } from 'react-native-webview';
+import { SIZES } from '../../utils/constants/theme';
+const { width } = Dimensions.get('window');
 const NewsDetail = () => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
-  const [loading, setLoading] = React.useState(false);
-
+  const [showIframe, setShowIframe] = useState(false);
   const item = route.params?.item;
   if (!item) {
     return (
@@ -26,207 +21,124 @@ const NewsDetail = () => {
       </SafeAreaView>
     );
   }
-
-  const handleOpenLink = async () => {
-    try {
-      setLoading(true);
-
-      if (item.videoId) {
-        const youtubeUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
-        const canOpen = await Linking.canOpenURL(youtubeUrl);
-        if (canOpen) {
-          await Linking.openURL(youtubeUrl);
-        } else {
-          alert('Cannot open YouTube link');
-        }
-      } else if (item.link) {
-        const canOpen = await Linking.canOpenURL(item.link);
-        if (canOpen) {
-          await Linking.openURL(item.link);
-        } else {
-          alert('Cannot open link');
-        }
-      } else {
-        alert('No link available for this item');
-      }
-    } catch (error) {
-      console.error('Error opening link:', error);
-      alert('Error opening link. Please try again.');
-    } finally {
-      setLoading(false);
+  const isVideo = !!item.videoId;
+  const getUrl = () => {
+    if (isVideo) {
+      return `https://www.youtube.com/embed/${item.videoId}?autoplay=1&rel=0&showinfo=0&controls=1`;
     }
+    return item.link || item.url;
   };
-
-  const isVideo = item.videoId ? true : false;
-
+  if (!isVideo) {
+    return (
+      <View style={styles.fullScreenArticle}>
+        <StatusBar barStyle="light-content" backgroundColor="#111" />
+        <SafeAreaView style={styles.articleHeaderContainer}>
+          <View style={styles.articleHeader}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+              <MaterialCommunityIcons name="close" size={24} color="#FFF" />
+            </TouchableOpacity>
+            <View style={styles.headerTextStack}>
+              <Text style={styles.articleHost} numberOfLines={1}>
+                {item.link?.split('/')[2] || 'Article View'}
+              </Text>
+              <Text style={styles.articleTitleHeader} numberOfLines={1}>
+                {item.title}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.shareBtn}>
+              <MaterialCommunityIcons name="share-variant" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+        <WebView 
+          source={{ uri: getUrl() }} 
+          style={styles.webViewFrame} 
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          startInLoadingState={true}
+          renderLoading={() => (
+            <View style={styles.browserLoader}>
+              <ActivityIndicator color="#F3E932" size="large" />
+            </View>
+          )}
+        />
+      </View>
+    );
+  }
   return (
     <SafeAreaView style={styles.container}>
-      {/* Back Button with Top: 25 */}
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-      >
+      <StatusBar barStyle="light-content" />
+      <TouchableOpacity style={styles.backButtonDetailed} onPress={() => navigation.goBack()}>
         <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
       </TouchableOpacity>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Image with Top Margin: 25 */}
-        <Image source={item.thumbnail} style={styles.thumbnail} />
-
+       <View style={styles.mediaContainer}>
+  {showIframe ? (
+    <YoutubePlayer
+      height={280}
+      play={true}
+      videoId={item.videoId}
+      onChangeState={(state:any) => {
+        if (state === "ended") setShowIframe(false);
+      }}
+    />
+  ) : (
+    <TouchableOpacity activeOpacity={0.9} onPress={() => setShowIframe(true)} style={styles.fullWidth}>
+      <View style={styles.imageOverlay}>
+        <Image source={{ uri: item.thumbnail }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <View style={styles.playBtnBackground}>
+          <MaterialCommunityIcons name="play-circle" size={80} color="#F3E932" />
+        </View>
+      </View>
+    </TouchableOpacity>
+  )}
+</View>
         <View style={styles.contentWrapper}>
-          <Text style={styles.category}>{item.category || 'News'}</Text>
-          <Text style={styles.title}>{item.title}</Text>
-
-          <View style={styles.metaContainer}>
-            <Text style={styles.metaText}>
-              {item.channel || item.date}
-            </Text>
-            {item.views && (
-              <Text style={styles.metaText}> • {item.views}</Text>
-            )}
+          <Text style={styles.categoryTag}>{item.category || 'ANALYSIS'}</Text>
+          <Text style={styles.mainTitle}>{item.title}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaInfo}>{item.channel || 'Market News'}</Text>
+            <Text style={styles.metaInfo}> • {item.date || item.views || 'Latest'}</Text>
           </View>
-
-          {item.description && (
-            <Text style={styles.description}>{item.description}</Text>
-          )}
-
-          <TouchableOpacity
-            style={[styles.actionButton, loading && styles.actionButtonDisabled]}
-            onPress={handleOpenLink}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#000" size="small" />
-            ) : (
-              <>
-                <MaterialCommunityIcons
-                  name={isVideo ? 'youtube' : 'web'}
-                  size={24}
-                  color="#000"
-                />
-                <Text style={styles.buttonText}>
-                  {isVideo ? 'Watch on YouTube' : 'Read Full Article'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.infoSection}>
-            <Text style={styles.infoTitle}>
-              {isVideo ? 'Video Details' : 'Article Details'}
+          <View style={styles.descriptionBox}>
+            <Text style={styles.boxTitle}>Key Insights</Text>
+            <Text style={styles.boxDescription}>
+              Watch this expert analysis to understand how these market shifts impact your gold-backed assets.
             </Text>
-            <Text style={styles.infoText}>
-              Type: {isVideo ? 'Video' : 'Article'}
-            </Text>
-            {item.channel && (
-              <Text style={styles.infoText}>Source: {item.channel}</Text>
-            )}
-            {item.date && (
-              <Text style={styles.infoText}>Published: {item.date}</Text>
-            )}
           </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#121212',
-  },
-  scrollContent: {
-    paddingBottom: 30,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 25, // Requested Header Margin
-    left: 20,
-    zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 10,
-    borderRadius: 20,
-  },
-  thumbnail: {
-    width: '100%',
-    height: 250,
-    marginTop: 25, // Requested Image Top Margin
-    resizeMode: 'cover',
-  },
-  contentWrapper: {
-    padding: 20,
-  },
-  category: {
-    color: '#FFD700',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: '#FFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    lineHeight: 30,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  metaText: {
-    color: '#888',
-    fontSize: 14,
-  },
-  description: {
-    color: '#CCC',
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 25,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    backgroundColor: '#FFD700',
-    padding: 15,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  actionButtonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 10,
-  },
-  infoSection: {
-    backgroundColor: '#1E1E1E',
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  infoTitle: {
-    color: '#FFD700',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  infoText: {
-    color: '#AAA',
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  errorText: {
-    color: '#FF6B6B',
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 50,
-  },
+  container: { flex: 1, backgroundColor: '#0B0B0C' },
+  scrollContent: { paddingBottom: 40, padding: SIZES.padding  },
+  fullScreenArticle: { flex: 1, backgroundColor: '#0B0B0C' },
+  articleHeaderContainer: { backgroundColor: '#111', borderBottomWidth: 0.5, borderBottomColor: '#333' },
+  articleHeader: { height: 55, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, justifyContent: 'space-between' },
+  headerTextStack: { flex: 1, marginHorizontal: 15 },
+  articleHost: { color: '#888', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  articleTitleHeader: { color: '#FFF', fontSize: 13, fontWeight: '500' },
+  closeBtn: { padding: 5 },
+  shareBtn: { padding: 5 },
+  webViewFrame: { flex: 1, backgroundColor: '#FFF' },
+  browserLoader: { ...StyleSheet.absoluteFillObject, backgroundColor: '#0B0B0C', justifyContent: 'center', alignItems: 'center' },
+  backButtonDetailed: { position: 'absolute', top: 20, left: 15, zIndex: 50, backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 20 },
+  mediaContainer: { width: '100%', height: 280, backgroundColor: '#000' },
+  videoPlayer: { width: width, height: 280 },
+  videoLoader: { position: 'absolute', top: '40%', left: '45%' },
+  imageOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  playBtnBackground: { backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 100 },
+  contentWrapper: { padding: 20 },
+  categoryTag: { color: '#F3E932', fontSize: 11, fontWeight: 'bold', marginBottom: 10, letterSpacing: 1 },
+  mainTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold', lineHeight: 30 },
+  metaRow: { flexDirection: 'row', marginTop: 12, marginBottom: 25 },
+  metaInfo: { color: '#8E8E93', fontSize: 13 },
+  descriptionBox: { backgroundColor: '#121214', padding: 20, borderRadius: 18, borderWidth: 1, borderColor: '#1C1C1E' },
+  boxTitle: { color: '#F3E932', fontSize: 14, fontWeight: 'bold', marginBottom: 8 },
+  boxDescription: { color: '#D1D1D6', fontSize: 14, lineHeight: 22 },
+  errorText: { color: '#FF453A', textAlign: 'center', marginTop: 50 },
+  fullWidth: { width: '100%', height: '100%' },
 });
-
 export default NewsDetail;

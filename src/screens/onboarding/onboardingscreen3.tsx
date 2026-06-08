@@ -3,6 +3,7 @@ import { hideNavigationBar } from 'react-native-navigation-bar-color';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, Image, TouchableOpacity, StatusBar, Dimensions } from 'react-native';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
+// import { SIZES } from '../../utils/constants/theme';
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
@@ -15,13 +16,19 @@ type RootStackParamList = {
 
 const Onboarding3 = () => {
     const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+    
+    const handleNavigation = (screenName: string) => {
+        navigation.navigate(screenName as never);
+    };
+
     useEffect(() => {
         try {
-            hideNavigationBar();
+            hideNavigationBar?.();
         } catch (e) {
             console.log('Navigation bar hide failed:', e);
         }
     }, []);
+
     return (
         <View style={styles.container}>
             <StatusBar hidden={true} />
@@ -34,7 +41,7 @@ const Onboarding3 = () => {
                 <View style={styles.centerContent}>
                     <View style={styles.iconContainer}>
                         <Image
-                       source={require('../../../assets/securityicon.png')}
+                            source={require('../../../assets/securityicon2.png')}
                             style={styles.SecurityIcon}
                             resizeMode='contain'
                         />
@@ -43,10 +50,10 @@ const Onboarding3 = () => {
                     <Text style={styles.description}>Reward is backed by physical gold,fully audited and insured</Text>
                 </View>
                 <View style={styles.footer}>
-                    <TouchableOpacity style={styles.nextButton} onPress={() => navigation.navigate('Welcome')}>
+                    <TouchableOpacity style={styles.nextButton} onPress={() => handleNavigation('Welcome')}>
                         <Text style={styles.nextText}>Get Started</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.skipButton} onPress={() => navigation.navigate('Welcome')}>
+                    <TouchableOpacity style={styles.skipButton} onPress={() => handleNavigation('Welcome')}>
                         <Text style={styles.skipText}>Skip</Text>
                     </TouchableOpacity>
                 </View>

@@ -1,33 +1,29 @@
 import React, { useState } from 'react';
 import { 
   View, Text, ScrollView, Alert, Modal, Image, 
-  TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator 
+  TouchableOpacity, StyleSheet, ActivityIndicator 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons'; 
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { db, auth } from '../../firebaseConfig'; 
 import { doc, updateDoc } from "firebase/firestore";
-
 const UploadDoc = ({ navigation }: any) => {
   const [selectedDoc, setSelectedDoc] = useState('Passport');
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [fileName, setFileName] = useState('No file selected');
+  const [fileType, setFileType] = useState<'image' | 'pdf' | null>(null);
   const [loading, setLoading] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
-
-  // --- CLOUDINARY CONFIGURATION ---
   const CLOUD_NAME = "dagaadhde"; 
   const UPLOAD_PRESET = "goldblock_preset";
-
   const docTypes = [
     { id: 'Passport', title: 'Passport' },
     { id: 'ID', title: 'National Identity' },
     { id: 'Address', title: 'Proof of Address' },
     { id: 'Photo', title: 'Facial Photo' },
   ];
-
-  // --- IMAGE & DOCUMENT PICKERS ---
   const openCamera = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (permission.granted) {
@@ -37,13 +33,13 @@ const UploadDoc = ({ navigation }: any) => {
       });
       if (!result.canceled) {
         setPreviewUri(result.assets[0].uri);
+        setFileType('image');
         setFileName(`Captured_${selectedDoc}.jpg`);
       }
     } else {
       Alert.alert("Permission Denied", "Camera access is required.");
     }
   };
-
   const openGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ 
       allowsEditing: true, 
@@ -51,19 +47,18 @@ const UploadDoc = ({ navigation }: any) => {
     });
     if (!result.canceled) {
       setPreviewUri(result.assets[0].uri);
+      setFileType('image');
       setFileName(`Gallery_${selectedDoc}.jpg`);
     }
   };
-
   const openDocument = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf' });
     if (!result.canceled) {
-      setPreviewUri(null); // PDF ka preview Image component mein nahi dikh sakta
+      setPreviewUri(result.assets[0].uri);
+      setFileType('pdf');
       setFileName(result.assets[0].name);
-      // PDF ke liye hum link save karenge magar preview gallery image jaisa nahi hoga
     }
   };
-
   const showChoices = () => {
     Alert.alert(
       "Upload Option",
@@ -76,86 +71,73 @@ const UploadDoc = ({ navigation }: any) => {
       ]
     );
   };
-
-  // --- CLOUDINARY UPLOAD LOGIC ---
-  const uploadToCloudinary = async (uri: string) => {
+  const uploadToCloudinary = async (uri: string, type: 'image' | 'pdf') => {
     const data = new FormData();
     data.append('file', {
       uri: uri,
-      type: 'image/jpeg',
-      name: 'upload.jpg',
+      type: type === 'pdf' ? 'application/pdf' : 'image/jpeg',
+      name: type === 'pdf' ? 'document.pdf' : 'upload.jpg',
     } as any);
     data.append('upload_preset', UPLOAD_PRESET);
-
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+    const resourceType = type === 'pdf' ? 'raw' : 'image';
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`, {
       method: 'POST',
       body: data,
     });
-
     const resData = await response.json();
     if (resData.secure_url) {
       return resData.secure_url;
     } else {
-      throw new Error("Cloudinary upload failed");
+      throw new Error(resData.error?.message || "Cloudinary upload failed");
     }
   };
-
-  // --- FINAL SUBMIT & FIRESTORE INTEGRATION ---
   const handleSubmit = async () => {
-    if (fileName === 'No file selected' || (!previewUri && selectedDoc !== 'Address')) {
-       return Alert.alert("Error", "Please upload a document first!");
+    if (!previewUri) {
+      return Alert.alert("Error", "Please upload a document first!");
     }
-
-    setLoading(true);
-
-    try {
-      const user = auth.currentUser;
-      if (!user) throw new Error("No authenticated user found");
-
-      // 1. Cloudinary par upload karein
-      let uploadedUrl = "";
-      if (previewUri) {
-        uploadedUrl = await uploadToCloudinary(previewUri);
-      }
-
-      // 2. Firestore payload tayyar karein
-      const userRef = doc(db, "users", user.uid);
-      const updatePayload: any = {
-        [`kyc_docs.${selectedDoc}`]: uploadedUrl,
-        kyc_status: "Pending",
-        last_kyc_update: new Date().toISOString()
-      };
-
-      // Agar Facial Photo hai toh profile picture bhi update hogi
-      if (selectedDoc === 'Photo') {
-        updatePayload.profileImage = uploadedUrl;
-      }
-
-      // 3. Database update karein
-      await updateDoc(userRef, updatePayload);
-
-      setLoading(false);
-      setIsVerified(true); // Modal show karein
-
-    } catch (error: any) {
-      setLoading(false);
-      console.error(error);
-      Alert.alert("Upload Failed", error.message || "Something went wrong");
-    }
+    Alert.alert(
+      "Confirm Submission",
+      "Please ensure the document is clear and readable. Incorrect documents may lead to verification failure.",
+      [
+        { text: "Review Again", style: "cancel" },
+        { 
+          text: "Submit Now", 
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const user = auth.currentUser;
+              if (!user) throw new Error("No authenticated user found");
+              const uploadedUrl = await uploadToCloudinary(previewUri, fileType!);
+              const userRef = doc(db, "users", user.uid);
+              const updatePayload: any = {
+                [`kyc_docs.${selectedDoc}`]: uploadedUrl,
+                kyc_status: "Pending",
+                last_kyc_update: new Date().toISOString()
+              };
+              if (selectedDoc === 'Photo') {
+                updatePayload.profileImage = uploadedUrl;
+              }
+              await updateDoc(userRef, updatePayload);
+              setLoading(false);
+              setIsVerified(true);
+            } catch (error: any) {
+              setLoading(false);
+              Alert.alert("Upload Failed", error.message);
+            }
+          }
+        }
+      ]
+    );
   };
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>KYC Verification</Text>
         </View>
-
         <View style={styles.content}>
           <Text style={styles.label}>SELECT DOCUMENT TYPE</Text>
           <View style={styles.docGrid}>
@@ -166,6 +148,7 @@ const UploadDoc = ({ navigation }: any) => {
                 onPress={() => {
                   setSelectedDoc(item.id);
                   setPreviewUri(null);
+                  setFileType(null);
                   setFileName('No file selected');
                 }}
               >
@@ -175,12 +158,22 @@ const UploadDoc = ({ navigation }: any) => {
               </TouchableOpacity>
             ))}
           </View>
-
+          <View style={styles.instructionBox}>
+            <MaterialCommunityIcons name="information-outline" size={18} color="#F3E932" />
+            <Text style={styles.instructionText}>
+              Make sure your {selectedDoc} is authentic and clearly visible.
+            </Text>
+          </View>
           <Text style={[styles.label, { marginTop: 25 }]}>Upload Document</Text>
-          
           <TouchableOpacity style={styles.uploadArea} onPress={showChoices}>
-            {previewUri ? (
+            {fileType === 'image' && previewUri ? (
               <Image source={{ uri: previewUri }} style={styles.previewImage} />
+            ) : fileType === 'pdf' ? (
+              <View style={{ alignItems: 'center' }}>
+                <MaterialCommunityIcons name="file-pdf-box" size={60} color="#FF4444" />
+                <Text style={styles.uploadText}>{fileName}</Text>
+                <Text style={styles.subText}>PDF Selected Successfully</Text>
+              </View>
             ) : (
               <View style={{ alignItems: 'center' }}>
                 <MaterialCommunityIcons name="cloud-upload" size={40} color="#606063" />
@@ -189,16 +182,14 @@ const UploadDoc = ({ navigation }: any) => {
               </View>
             )}
           </TouchableOpacity>
-
-          {previewUri && (
+          {(previewUri || fileType) && (
             <TouchableOpacity 
-              onPress={() => { setPreviewUri(null); setFileName('No file selected'); }}
+              onPress={() => { setPreviewUri(null); setFileType(null); setFileName('No file selected'); }}
               style={styles.removeButton}
             >
               <Text style={styles.removeText}>Remove & Re-upload</Text>
             </TouchableOpacity>
           )}
-
           <TouchableOpacity 
             style={[styles.submitButton, loading && { opacity: 0.7 }]} 
             onPress={handleSubmit}
@@ -210,8 +201,6 @@ const UploadDoc = ({ navigation }: any) => {
               <Text style={styles.submitButtonText}>Submit for Review</Text>
             )}
           </TouchableOpacity>
-
-          {/* Success Modal */}
           <Modal visible={isVerified} transparent={true} animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
@@ -222,12 +211,8 @@ const UploadDoc = ({ navigation }: any) => {
                 <Text style={styles.modalSubtitle}>
                   Your documents are under review. We'll notify you within 24 hours.
                 </Text>
-                
                 <TouchableOpacity 
-                  onPress={() => {
-                    setIsVerified(false);
-                    navigation.navigate('hero'); 
-                  }}
+                  onPress={() => { setIsVerified(false); navigation.navigate('hero'); }}
                   style={styles.modalButton}
                 >
                   <Text style={styles.modalButtonText}>Continue</Text>
@@ -235,17 +220,15 @@ const UploadDoc = ({ navigation }: any) => {
               </View>
             </View>
           </Modal>
-
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0B0C' },
   scrollContent: { paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 20, marginTop: 25 },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 20, },
   headerTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', marginLeft: 15 },
   content: { paddingHorizontal: 20 },
   label: { color: '#606063', fontSize: 12, marginBottom: 15, fontWeight: '600', letterSpacing: 1 },
@@ -254,9 +237,20 @@ const styles = StyleSheet.create({
   activeDocButton: { backgroundColor: '#F3E932' },
   docButtonText: { color: '#606063', fontSize: 13, fontWeight: '500' },
   activeDocText: { color: '#000', fontWeight: 'bold' },
-  uploadArea: { width: '100%', height: 200, backgroundColor: '#121214', borderRadius: 20, borderWidth: 1, borderColor: '#1C1C1E', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginTop: 10 },
-  previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  uploadText: { color: '#FFF', fontSize: 14, marginTop: 10 },
+  instructionBox: { 
+    flexDirection: 'row', 
+    backgroundColor: 'rgba(243, 233, 50, 0.1)', 
+    padding: 12, 
+    borderRadius: 10, 
+    marginTop: 20, 
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(243, 233, 50, 0.2)'
+  },
+  instructionText: { color: '#F3E932', fontSize: 12, marginLeft: 10, flex: 1, lineHeight: 18 },
+  uploadArea: { width: '100%', minHeight: 200, backgroundColor: '#121214', borderRadius: 20, borderWidth: 1, borderColor: '#1C1C1E', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginTop: 10, padding: 20 },
+  previewImage: { width: '100%', height: 180, resizeMode: 'contain' },
+  uploadText: { color: '#FFF', fontSize: 14, marginTop: 10, textAlign: 'center' },
   subText: { color: '#606063', fontSize: 12, marginTop: 5 },
   removeButton: { marginTop: 15, alignItems: 'center' },
   removeText: { color: '#FF4444', fontWeight: 'bold' },
@@ -270,5 +264,4 @@ const styles = StyleSheet.create({
   modalButton: { backgroundColor: '#F3E932', width: '100%', height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   modalButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 }
 });
-
 export default UploadDoc;
